@@ -1,0 +1,112 @@
+        - # ------------------------------------------------------------------- #
+        - # Copyright 2015-2016, Davide Lasagna, AFM, University of Southampton #
+        - # ------------------------------------------------------------------- #
+        - module CyclicMatrices
+        - 
+        - import Base: full, size, A_ldiv_B!, copy
+        - 
+        - export CyclicMatrix, _blocksize
+        - 
+        - 
+        - immutable CyclicMatrix{ T,
+        -                        MD<:AbstractMatrix,
+        -                        MA<:AbstractMatrix,
+        -                        MC<:AbstractMatrix} <: AbstractMatrix{T}
+        -     D ::MD
+        -     A¹::MA
+        -     Cⁿ::MC
+        -     function CyclicMatrix( D::AbstractMatrix{T},
+        -                           A¹::AbstractMatrix{T},
+        -                           Cⁿ::AbstractMatrix{T})
+        0         size(A¹) == size(Cⁿ) ||
+        -             throw(ArgumentError("size of A¹ and Cⁿ must match"))
+        0         new(D, A¹, Cⁿ)
+        -     end
+        - end
+        0 CyclicMatrix{T}( D::AbstractMatrix{T},
+        -                 A¹::AbstractMatrix{T},
+        -                 Cⁿ::AbstractMatrix{T}) =
+        -     CyclicMatrix{T, typeof(D), typeof(A¹), typeof(Cⁿ)}(D, A¹, Cⁿ)
+        - 
+        - size(A::CyclicMatrix) = size(A.D)
+        - eltype{T, MD, MA, MB}(A::CyclicMatrix{T, MD, MA, MB}) = T
+        - 
+        - copy(A::CyclicMatrix) = 
+        -     CyclicMatrix(copy(A.D), copy(A.A¹), copy(A.Cⁿ))
+        - 
+        - 
+        - # size of the square cyclic blocks
+  1378010 _blocksize(A::CyclicMatrix) = size(A.A¹, 1)
+        - 
+        - function full(A::CyclicMatrix)
+        -     m = _blocksize(A)
+        -     Af = zeros(eltype(A), size(A)...)
+        -     Af[:] = A.D
+        -     Af[1:m, (end-m+1):end] = A.A¹
+        -     Af[(end-m+1):end, 1:m] = A.Cⁿ
+        -     Af
+        - end
+        - 
+        - function A_ldiv_B!{T, MD, MA, MB}(A::CyclicMatrix{T, MD, MA, MB}, 
+        -                                   f::AbstractVector{T},
+        -                                   factorise=identity)
+        -     # blocksize
+        0     m = _blocksize(A)
+        - 
+        -     # aliases
+        0     D, A¹, Cⁿ = A.D, A.A¹, A.Cⁿ
+        - 
+        -     # parameters
+        0     α, γ = one(eltype(A)), one(eltype(A))
+        - 
+        -     # modify D
+        0     Δ = size(A, 1) - m
+        0     @simd for I in eachindex(Cⁿ)
+        0         @inbounds D[I[1],     I[2]] -= γ/α*Cⁿ[I[1], I[2]]
+        0     end
+        0     @simd for I in eachindex(A¹)
+        0         @inbounds D[I[1]+Δ, I[2]+Δ] -= α/γ*A¹[I[1], I[2]]
+        -     end
+        0 
+        0     # alias
+        0     Ã = D
+        0 
+        0     # define U
+        0     U = zeros(T, size(A, 1), m)
+        0     @simd for i = 1:m
+        0         @inbounds U[i,             i] = 1/α
+        0         @inbounds U[end-i+1, end-i+1] = 1/γ
+        0     end
+        - 
+        -     # factorise Ã if provided - default is no-op
+        0     _Ã = factorise(Ã)
+        - 
+        0     # solve Ãy = f, in place - f is aliased to y
+        0     y = A_ldiv_B!(_Ã, f)
+        - 
+        -     # solve ÃZ = U, in place - U is aliased to Z
+        0     Z = A_ldiv_B!(_Ã, U)
+        - 
+        -     # construct M
+        0     CⁿZ¹ = Cⁿ*Z[1:m,           :]
+        0     A¹Zⁿ = A¹*Z[(end-m+1):end, :]
+        - 
+        0     M = eye(m, m)
+        0     for j = 1:m, i = 1:m
+   160000         M[i, j] += γ*CⁿZ¹[i, j] + α*A¹Zⁿ[i, j]
+        -     end
+        - 
+        -     # construct Vᵀy
+        0     Vᵀy = γ*Cⁿ*y[1:m] + α*A¹*y[end-m+1:end]
+        - 
+        -     # solve Mu = Vᵀy
+        0     u = M\Vᵀy
+        - 
+        -     # get x
+        0     x = y - Z*u
+        - 
+        -     # return 
+        0     x
+        - end
+        - 
+        - end
