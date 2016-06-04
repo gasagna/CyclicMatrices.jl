@@ -98,6 +98,7 @@ end
 size(Mᶠ::CyclicMatrixLU) = size(Mᶠ.Bᶠ)
 size(Mᶠ::CyclicMatrixLU, i::Integer) = size(Mᶠ.Bᶠ, i)
 
+lufact(M::CyclicMatrix) = lufact!(copy(M))
 function lufact!{T, MB, MA, MC}(M::CyclicMatrix{T, MB, MA, MC})
     # block size
     m = size(M.A, 1)
