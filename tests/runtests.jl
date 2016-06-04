@@ -130,3 +130,12 @@ let
     @test norm(Base.LinAlg.A_ldiv_B!(lufact!(MT), collect(1.0:12.0)) -
                Base.LinAlg.At_ldiv_B!(lufact!(M), collect(1.0:12.0)), Inf) < ENORM
 end
+
+# test lufact makes a copy
+let
+   M = CyclicMatrix(copy(B), copy(A), copy(C))
+   luM = lufact(M) 
+   @test body(M)  == B
+   @test upper(M) == A
+   @test lower(M) == C
+end
